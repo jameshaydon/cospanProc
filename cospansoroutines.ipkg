@@ -1,0 +1,7 @@
+package cospancoroutines
+
+modules = Main
+        , Types.Pushout
+        , Examples.PingPong
+
+pkgs = contrib
