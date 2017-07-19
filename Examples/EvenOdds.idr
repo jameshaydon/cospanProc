@@ -32,7 +32,10 @@ ParityCh = MkChanCtx Parity (const Int)
 -- channels, one for if the original integer was even, and another for if it was
 -- odd.
 
-procA : PropProc (Coproduct IntCh ParityCh) IntCh ParityCh (InM IntCh ParityCh) (OutM IntCh ParityCh)
+IntToParityCh : ChanCtx
+IntToParityCh = Coproduct IntCh ParityCh
+
+procA : PropProc IntToParityCh IntCh ParityCh (InM IntCh ParityCh) (OutM IntCh ParityCh)
 procA = MkPropProc $ go
   where
     go = Take (InCh ())
@@ -42,7 +45,10 @@ procA = MkPropProc $ go
 
 -- We have another process which increments integers.
 
-procB : PropProc (Coproduct IntCh IntCh) IntCh IntCh (InM IntCh IntCh) (OutM IntCh IntCh)
+IntToInt : ChanCtx
+IntToInt = Coproduct IntCh IntCh
+
+procB : PropProc IntToInt IntCh IntCh (InM IntCh IntCh) (OutM IntCh IntCh)
 procB = MkPropProc $ go
   where
     go = Take (InCh ())
@@ -53,9 +59,7 @@ procB = MkPropProc $ go
 -- into evens and odds. So we need a special pushout in order to mesh these two
 -- processes together.
 
-namespace TwoStep
-
-  data TwoStep = In | Middle | Out
+data TwoStep = In | Middle | Out
 
 InL : InOut () Parity -> TwoStep
 InL (InCh ()) = In
@@ -70,7 +74,7 @@ pu = MkPushout uniProp
   where
     uniProp t l r pf = (lr ** (ll, rr))
       where lr : TwoStep -> t
-            lr TwoStep.In = l (InCh ())
+            lr In = l (InCh ())
             lr Middle = r (InCh ())
             lr Out = r (OutCh ())
 
@@ -86,7 +90,19 @@ pu = MkPushout uniProp
 Ctx : ChanCtx
 Ctx = MkChanCtx TwoStep (const Int)
 
-proc : PropProc Ctx IntCh IntCh ?lol1 ?lol2
+-- first we have to lift InL and InR to ChannelContext morphisms:
+
+InLCh : Morph IntToParityCh Ctx
+InLCh = MkMorph InL pf
+  where pf (InCh _) = Refl
+        pf (OutCh _) = Refl
+
+InRCh : Morph IntToInt Ctx
+InRCh = MkMorph InR pf
+  where pf (InCh _) = Refl
+        pf (OutCh _) = Refl
+
+proc : PropProc Ctx IntCh IntCh (comp (InM IntCh ParityCh) InLCh) (comp (OutM IntCh IntCh) InRCh)
 proc = propComp procA procB' (MkPushout pu)
   where
     -- we need to collapse procAs output into procBs:
